@@ -1,0 +1,89 @@
+---
+title: "Predicting quality of exercise execution"
+author: "Eashani Deorukhkar"
+date: "December 3, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Introduction
+
+A majority of research into Human activity recognition focuses on quantitative aspects of activities as opposed to the qualitative. This project aims to focus on how well the activities are completed. It uses data from:
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+## Exploration and preprocessing
+The data has 6 participants who undertake the various exercises whose correctness ranges from A to E where A is the correct from and the rest are different wrong forms.The dataset being huge and not clean needs to be processed before applying the algorithms. The columns which summarize the data eg. columns which have the phrases "var","min","max","kurt" are removed as they contain redundant information.
+Additionally, columns that do not contain information that is pertinent to the machine learning process are removed. This includes columns containing index numbers and timestamps.
+
+The columns containing NAs are removed instead of imputed as it can cause errors in the predictions.
+
+```{r warning=FALSE,message=FALSE,cache=TRUE}
+library(caret)
+library(AppliedPredictiveModeling)
+
+library(plyr)
+library(dplyr)
+traindata <- read.csv("pml-training.csv")
+testdata <- read.csv("pml-testing.csv")
+```
+## Cross-Validation
+
+The K fold method is used for cross validation to as it shows less bias and variation while also inscreasing the amount of data available for testing and validation. k=10 is chosen.
+The data is separated into the training and (intermediate)testing sets. This testing set is used to check the accuracy of the ML algorithm before applying it on the actual test set.
+
+
+```{r warning=FALSE,message=FALSE,cache=TRUE}
+comm <- intersect(colnames(testdata),colnames(traindata))
+testd <- testdata[,comm]
+traind <- traindata[,comm]
+
+traindata <- cbind(traind[,grep('acce',names(traind))],traind[,grep('gyr',names(traind))],traind[,grep('mag',names(traind))],traindata$classe)
+
+names(traindata)[names(traindata) == "traindata$classe"] <- "classe"
+
+traindata = traindata[,!grepl("var",names(traindata))]
+traindata = traindata[,!grepl("min",names(traindata))]
+traindata = traindata[,!grepl("max",names(traindata))]
+traindata = traindata[,!grepl("kurt",names(traindata))]
+traindata <- traindata[sample(nrow(traindata)),]
+folds <- cut(seq(1,nrow(traindata)),breaks=10,labels=FALSE)
+testdata1 <- data.frame()
+traindata1 <- data.frame()
+for(i in 1:10){
+  testIndexes <- which(folds==i,arr.ind=TRUE)
+  testdata1 <- rbind(testdata1,traindata[testIndexes, ])
+  traindata1 <- rbind(traindata1,traindata[-testIndexes,]) 
+}
+```
+## Predictions
+
+The Random Forest algorithm is chosen to perform the predictions with number of trees=10.
+
+```{r warning=FALSE,message=FALSE,cache=TRUE}
+library(randomForest)
+
+model1 <- randomForest(classe ~ .,data=traindata1,ntree=10)
+model1
+trad <- traindata1[,-nrow(traindata1)]
+pred1 <-predict(model1,trad[])
+tesd <- testdata1[,-nrow(testdata1)]
+pred2 <- predict(model1,tesd[])
+confusionMatrix(pred1,traindata1$classe)
+confusionMatrix(pred2,testdata1$classe)
+```
+As the accuracy of the said model on the training and intermediate testing sets as shown above (top matrix=training, bottom matrix=testing) is 1 ie 100% it can be used on the final testing set.
+
+```{r}
+testdatafinal <- cbind(testdata[,grep('acce',names(testdata))],testdata[,grep('gyr',names(testdata))],testdata[,grep('mag',names(testdata))])
+testdatafinal = testdatafinal[,!grepl("var",names(testdatafinal))]
+testdatafinal = testdatafinal[,!grepl("min",names(testdatafinal))]
+testdatafinal = testdatafinal[,!grepl("max",names(testdatafinal))]
+testdatafinal = testdatafinal[,!grepl("kurt",names(testdatafinal))]
+
+predict(model1,testdatafinal[])
+```
+Thus thus the predictions on the test set are shown above. the estimated error rate is 0%
